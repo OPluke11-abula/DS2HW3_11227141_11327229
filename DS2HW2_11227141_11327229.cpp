@@ -32,10 +32,10 @@ struct Node {
     vector<vector<Record>> keys;
     Node* children[4];
     Node* parent;
-    int keyCount;
+    int key_count;
 
     //initialize the node
-    Node() : parent(nullptr), keyCount(0) {
+    Node() : parent(nullptr), key_count(0) {
       for (int i = 0; i < 4; ++i) {
         children[i] = nullptr;
       }
@@ -47,7 +47,21 @@ class TwoThreeTree {
  private:
   Node *root;
 
-  bool isLeaf(const Node* &node) {
+  int getHeight(Node* node) {
+    if (node == nullptr) return 0;
+    return 1 + getHeight(node->children[0]);
+  }
+
+  int countNodes(Node* node) {
+    if (node == nullptr) return 0;
+    int count = 1;
+    for (int i = 0; i <= node->key_count; ++i) {
+      count += countNodes(node->children[i]);
+    }
+    return count;
+  }
+
+  bool isLeaf(Node* node) {
     // if the first child is null, then it's a leaf node
     return (node->children[0] == nullptr);
   }
@@ -57,104 +71,122 @@ class TwoThreeTree {
 
     //由於2-3樹往上生長，故不用檢查nullptr，他一定會有兩~三個節點存在
     while (!isLeaf(current)) {
-      if (record.graduates < current->keys[0].graduates) {
+      if (record.students < current->keys[0][0].students) {
         current = current->children[0];
-      } else if (record.graduates == current->keys[0].graduates) {
+      } else if (record.students == current->keys[0][0].students) {
         current->keys[0].push_back(record);
-        current = nullptr; //直接存相同的值
+        return nullptr; //直接存相同的值
       } else if (current->key_count == 1) {
         current = current->children[1];
       } else {
-        if (record.graduates == current->keys[1].graduates) {
-          current->keys[2].push_back(record);
-          current = nullptr; //直接存相同的值
+        if (record.students == current->keys[1][0].students) {
+          current->keys[1].push_back(record);
+          return nullptr; //直接存相同的值
         }
-        else if (record.graduates < current->keys[1].graduates) {
+        else if (record.students < current->keys[1][0].students) {
           current = current->children[1];
         } else {
           current = current->children[2];
         }
       }
     }
+
+    // 抵達葉節點時也要檢查是否已經存在相同的值
+    if (record.students == current->keys[0][0].students) {
+      current->keys[0].push_back(record);
+      return nullptr;
+    } else if (current->key_count == 2 && record.students == current->keys[1][0].students) {
+      current->keys[1].push_back(record);
+      return nullptr;
+    }
+
     return current;
   }
 
   void sortKeys(Node* node, Record &record) {
-    if (record < node->keys[0]) {
-      node->keys.push_back(node->keys[1]);
+    if (record.students < node->keys[0][0].students) {
+      node->keys[2] = node->keys[1];
       node->keys[1] = node->keys[0];
-      node->keys[0] = record;
-    } else if (record < node->keys[1]) {
-      node->keys.push_back(node->keys[1]);
-      node->keys[1] = record;
+      node->keys[0].clear();
+      node->keys[0].push_back(record);
+    } else if (record.students < node->keys[1][0].students) {
+      node->keys[2] = node->keys[1];
+      node->keys[1].clear();
+      node->keys[1].push_back(record);
     } else {
-      node->keys.push_back(record);
+      node->keys[2].clear();
+      node->keys[2].push_back(record);
     }
   }
 
   void splitNode(Node* node) {
+    // 1. 新建右側分裂出來的節點
+    Node* new_node = new Node();
+    new_node->keys[0] = node->keys[2];
+    new_node->key_count = 1;
+
+    // 將 node 的第 3 和第 4 個小孩過繼給 new_node (內部節點分裂)
+    new_node->children[0] = node->children[2];
+    new_node->children[1] = node->children[3];
+    if (new_node->children[0] != nullptr) new_node->children[0]->parent = new_node;
+    if (new_node->children[1] != nullptr) new_node->children[1]->parent = new_node;
+
+    // 將準備提升的鍵暫存起來
+    vector<Record> promote_key = node->keys[1];
+
+    // 清空 node 右半部的值跟小孩
+    node->keys[1].clear();
+    node->keys[2].clear();
+    node->children[2] = nullptr;
+    node->children[3] = nullptr;
+    node->key_count = 1;
+
+    // 2. 處理父節點
     if (node->parent == nullptr) {
+      // 升級成全新的 Root
       Node* new_root = new Node();
-
-      new_root->keys[0] = node->keys[1]; //將中間的值提升到父節點
-      new_root->children[0] = node; //原本的節點成為新的 root 的第一個子節點
-
-      new_root->children[1] = new Node(); //建立新的節點，成為新的 root 的第二個子節點
-      new_root->children[1]->keys[0] = node->keys[2]; //將原本的第三個值移到新的節點
-
-      new_root->key_count = node->key_count = new_root->children[1]->key_count = 1; //更新 key_count
-
-      node->keys[1] = node->keys[2] = Record(); //清空原本的值
-
-      node->parent = new_root->children[1]->parent = new_root; //更新父節點
-      root = new_root; //更新 root
-    } else if (node->parent->key_count == 1) {
-      Node* new_node = new Node();
-      Node* parent_node = node->parent;
-
-      if (node == parent_node->children[0]) {
-        parent_node->children[2] = parent_node->children[1]; //將原本的第二個子節點移到第三個子節點
-        parent_node->children[1] = new_node; //將新的節點放在第二個子節點的位置
-        new_node->parent = parent_node;
-
-        new_node->keys[0] = node->keys[2]; // 將原本的第三個值移到新的節點
-        new_node->key_count = 1;
-
-        parent_node->keys.insert(parent_node->keys.begin(), node->keys[1]); //將原本的第二個值提升到父節點
-        parent_node->key_count = 2;
-
-        node->keys[1] = node->keys[2] = Record(); //清空原本的值
-        node->key_count = 1;
-      } else {
-        parent_node->children[2] = new_node; //將新的節點放在第三個子節點的位置
-        new_node->parent = parent_node;
-
-        new_node->keys[0] = node->keys[2]; // 將原本的第三個值移到新的節點
-        new_node->key_count = 1;
-
-        parent_node->keys.push_back(node->keys[1]);
-        parent_node->key_count = 2;
-
-        node->keys[1] = node->keys[2] = Record(); //清空原本的值
-        node->key_count = 1;
-      }
+      new_root->keys[0] = promote_key;
+      new_root->key_count = 1;
+      
+      new_root->children[0] = node;
+      new_root->children[1] = new_node;
+      
+      node->parent = new_root;
+      new_node->parent = new_root;
+      root = new_root;
     } else {
-      //父節點已經有兩個值了，先排序後分裂
-      sortKeys(node->parent, node->keys[1]);
-      node->keys[1] = node->keys[2];
-      node->keys[2] = Record();
-      node->key_count = 2;
-      splitNode(node->parent); //遞迴分裂父節點
-    }
+      Node* parent_node = node->parent;
+      
+      // 尋找此 node 是父節點的第幾個小孩
+      int child_idx = 0;
+      while (child_idx <= parent_node->key_count && parent_node->children[child_idx] != node) {
+        child_idx++;
+      }
 
-    return;
+      // 將父節點的 key 和小孩往右移動，騰出空間給新晉升的 key 和 new_node
+      for (int i = parent_node->key_count; i > child_idx; i--) {
+        parent_node->keys[i] = parent_node->keys[i - 1];
+        parent_node->children[i + 1] = parent_node->children[i];
+      }
+
+      // 將值與新節點插入父節點
+      parent_node->keys[child_idx] = promote_key;
+      parent_node->children[child_idx + 1] = new_node;
+      new_node->parent = parent_node;
+      parent_node->key_count++;
+
+      // 若父節點也滿了（達到 3 個 key），則連鎖觸發分裂
+      if (parent_node->key_count == 3) {
+        splitNode(parent_node);
+      }
+    }
   }
 
   void insertOne(Record &record) {
     //建立 root 節點
     if (root == nullptr) {
       root = new Node();
-      root->keys[0] = record;
+      root->keys[0].push_back(record);
       root->key_count = 1;
       return;
     }
@@ -166,11 +198,13 @@ class TwoThreeTree {
       return; //已經插入相同的值了
     } else {
       if (probe->key_count == 1) {
-        if (record.graduates < probe->keys[0].graduates) {
-          probe->keys.push_back(probe->keys[0]);
-          probe->keys[0] = record;
+        if (record.students < probe->keys[0][0].students) {
+          probe->keys[1] = probe->keys[0];
+          probe->keys[0].clear();
+          probe->keys[0].push_back(record);
         } else {
-          probe->keys.push_back(record);
+          probe->keys[1].clear();
+          probe->keys[1].push_back(record);
         }
         probe->key_count = 2;
       } else {
@@ -189,14 +223,30 @@ class TwoThreeTree {
 
   void insert(vector<Record> records_list) {
     for (int i = 0; i < records_list.size(); ++i) {
-     heap.insertOne(records_list[i]);
+      insertOne(records_list[i]);
     }
     return;
   }
 
   void printTargetNodes() {
-    //TODO：printTargetNodes
-    return;
+    if (root == nullptr) return;
+    int height = getHeight(root);
+    int nodes = countNodes(root);
+    cout << "Tree height = " << height << "\n";
+    cout << "Number of nodes = " << nodes << "\n";
+
+    int count = 1;
+    for (int i = 0; i < root->key_count; ++i) {
+      for (const auto& r : root->keys[i]) {
+        cout << count++ << ": [" << r.seqId << "] " 
+             << r.schoolName << ", " 
+             << r.deptName << ", " 
+             << r.dayNight << ", " 
+             << r.level << ", " 
+             << r.students << ", " 
+             << r.graduates << "\n";
+      }
+    }
   }
 };
 
@@ -267,8 +317,8 @@ bool loadFile(const string &filename, vector<Record> &records_list) {
           tokens.push_back(token);
       }
         
-      if (tokens.size() < 11_) {
-        cotinue; // skip this line if it doesn't have enough fields
+      if (tokens.size() < 11) {
+        continue; // skip this line if it doesn't have enough fields
       }
 
       Record r;
@@ -309,7 +359,7 @@ bool processCommand(int cmd) {
 
   if (cmd == 1) {
     TwoThreeTree tree;
-    records_list = Record();
+    records_list.clear();
 
     do {
       cout << "\nInput a file number ([0] Quit): ";
