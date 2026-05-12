@@ -199,8 +199,8 @@ public:
 
     // 開始將每一筆資料依序插入雜湊表
     for (const auto &stu : dataList) {
-      string sidStr(stu.sid, 8); // 老師指定學號為固定八位數，強制截斷至8位以忽略最後兩個位元的垃圾值
-      sidStr = sidStr.c_str();   // 安全截斷至第一個 \0（若有短於8碼的防呆）
+      string sidStr(stu.sid, 10); // 學號為固定十位數
+      sidStr = sidStr.c_str();   // 安全截斷至第一個 \0（若有短於10碼的防呆）
 
       unsigned long long asciiProduct = getAsciiProduct(sidStr); // 計算學號 ASCII 乘積
       int baseHash = asciiProduct %
@@ -314,7 +314,7 @@ public:
 
     // 開始將每一筆資料依序插入雜湊表
     for (const auto &stu : dataList) {
-      string sidStr(stu.sid, 8); // 老師指定學號為固定八位數，忽略最後兩個位元的垃圾值
+      string sidStr(stu.sid, 10); // 學號為固定十位數
       sidStr = sidStr.c_str();   // 截斷至 \0
 
       unsigned long long asciiProduct = getAsciiProduct(sidStr); // 計算學號 ASCII 乘積
@@ -408,7 +408,8 @@ public:
       return;
     }
 
-    unsigned long long asciiProduct = getAsciiProduct(sid);
+    string safeSid = sid.length() > 10 ? sid.substr(0, 10) : sid;
+    unsigned long long asciiProduct = getAsciiProduct(safeSid);
     int baseHash = asciiProduct % quadraticSize;
     int probes = 0;
 
@@ -422,9 +423,10 @@ public:
       }
 
       if (quadraticTable[probeHash].sid == sid) {
+        cout.unsetf(ios_base::floatfield);
         cout << "\n{ " << quadraticTable[probeHash].sid << ", "
              << quadraticTable[probeHash].sname << ", "
-             << fixed << setprecision(2) << quadraticTable[probeHash].mean
+             << quadraticTable[probeHash].mean
              << " } is found after " << probes << " probes.\n";
         return;
       }
@@ -438,7 +440,8 @@ public:
       return;
     }
 
-    unsigned long long asciiProduct = getAsciiProduct(sid);
+    string safeSid = sid.length() > 10 ? sid.substr(0, 10) : sid;
+    unsigned long long asciiProduct = getAsciiProduct(safeSid);
     int baseHash = asciiProduct % doubleSize;
     int step = doubleMaxStep - (asciiProduct % doubleMaxStep);
     int probes = 0;
@@ -453,9 +456,10 @@ public:
       }
 
       if (doubleTable[probeHash].sid == sid) {
+        cout.unsetf(ios_base::floatfield);
         cout << "\n{ " << doubleTable[probeHash].sid << ", "
              << doubleTable[probeHash].sname << ", "
-             << fixed << setprecision(2) << doubleTable[probeHash].mean
+             << doubleTable[probeHash].mean
              << " } is found after " << probes << " probes.\n";
         return;
       }
