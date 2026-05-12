@@ -38,7 +38,12 @@ struct HashNode {
 class HashTableManager {
 private:
   vector<Student>
-      dataList; // 儲存從檔案讀取的資料，使用 vector 滿足動態陣列規範
+      dataList;            // 儲存從檔案讀取的資料，使用 vector 滿足動態陣列規範
+  vector<HashNode> tableX; // 儲存任務一的雜湊表
+  int tableSizeX = 0;
+  vector<HashNode> tableY; // 儲存任務二的雜湊表
+  int tableSizeY = 0;
+  int maxStepY = 0;
 
   // 判斷一個整數 n 是否為質數
   bool isPrime(int n) {
@@ -72,7 +77,8 @@ private:
     for (char c : sid) {
       // 過濾可能的空字元或其他非預期結尾符號，確保只乘上有效字元
       if (c != '\0' && c != '\r' && c != '\n') {
-        product *= (unsigned long long)(unsigned char)c; // 轉為無號數避免溢位成為負數
+        product *=
+            (unsigned long long)(unsigned char)c; // 轉為無號數避免溢位成為負數
       }
     }
     return product; // 回傳算出的 ASCII 乘積
@@ -82,6 +88,11 @@ public:
   // 清空現有讀取的資料，供切換檔案時使用
   void clearData() {
     dataList.clear(); // 清空 vector 內容
+    tableX.clear();
+    tableY.clear();
+    tableSizeX = 0;
+    tableSizeY = 0;
+    maxStepY = 0;
   }
 
   // 取得目前讀取的資料筆數
@@ -147,7 +158,8 @@ public:
           try {
             stu.score[i] = (unsigned char)stoi(token); // 轉型成無號字元
           } catch (...) {
-            stu.score[i] = 0; // 防呆：若該欄位損毀或為空，則設為0避免拋出異常(RE)
+            stu.score[i] =
+                0; // 防呆：若該欄位損毀或為空，則設為0避免拋出異常(RE)
           }
         }
       }
@@ -186,11 +198,13 @@ public:
     int totalSuccessfulComparisons = 0; // 記錄成功搜尋的總比較次數
 
     // 開始將每一筆資料依序插入雜湊表
+    int dataIdx = 0;
     for (const auto &stu : dataList) {
-      string sidStr(stu.sid, 8); // 老師指定學號為固定八位數，強制截斷至8位以忽略最後兩個位元的垃圾值
-      sidStr = sidStr.c_str();   // 安全截斷至第一個 \0（若有短於8碼的防呆）
+      string sidStr(stu.sid, 10); // 學號為固定十位數
+      sidStr = sidStr.c_str();    // 安全截斷至第一個 \0（若有短於10碼的防呆）
 
-      unsigned long long asciiProduct = getAsciiProduct(sidStr); // 計算學號 ASCII 乘積
+      unsigned long long asciiProduct =
+          getAsciiProduct(sidStr); // 計算學號 ASCII 乘積
       int baseHash = asciiProduct %
                      tableSize; // 基本雜湊函數：(ASCII編碼相乘) % 雜湊表大小
 
@@ -200,17 +214,18 @@ public:
       // 平方探測處理碰撞：(hash + i^2) % tableSize
       for (int i = 0; i < tableSize; ++i) {
         comparisons++; // 每次探測位址，視為一次比較
-        int probeHash = (baseHash + (long long)i * i) % tableSize; // 轉 long long 防止 i*i 溢位為負數造成RE
+        int probeHash = (baseHash + (long long)i * i) %
+                        tableSize; // 轉 long long 防止 i*i 溢位為負數造成RE
 
         // 若找到空位，則將資料放入該位址
         if (hashTable[probeHash].isEmpty) {
-          hashTable[probeHash].hvalue = baseHash;        // 記錄原始的雜湊值
-          hashTable[probeHash].sid = sidStr;             // 記錄學號
-          string snameStr(stu.sname, 10);                // 指定長度防止越界
-          snameStr = snameStr.c_str();                   // 安全截斷
-          hashTable[probeHash].sname = snameStr;         // 記錄姓名
-          hashTable[probeHash].mean = stu.average;       // 記錄平均分數
-          hashTable[probeHash].isEmpty = false;          // 標記該位址已被占用
+          hashTable[probeHash].hvalue = baseHash;  // 記錄原始的雜湊值
+          hashTable[probeHash].sid = sidStr;       // 記錄學號
+          string snameStr(stu.sname, 10);          // 指定長度防止越界
+          snameStr = snameStr.c_str();             // 安全截斷
+          hashTable[probeHash].sname = snameStr;   // 記錄姓名
+          hashTable[probeHash].mean = stu.average; // 記錄平均分數
+          hashTable[probeHash].isEmpty = false;    // 標記該位址已被占用
 
           inserted = true; // 標記為成功插入
           totalSuccessfulComparisons +=
@@ -223,8 +238,9 @@ public:
       // 若走訪了 tableSize
       // 次都找不到空位，則顯示無法加入的錯誤訊息並忽略該筆資料
       if (!inserted) {
-        cout << "Cannot insert student ID: " << sidStr << endl;
+        cout << "### Failed at [" << dataIdx << "]. ###\n";
       }
+      dataIdx++;
     }
 
     // 計算搜尋現存值 (successful search) 的平均比較次數
@@ -279,6 +295,65 @@ public:
          << avgUnsuccessful << " comparisons on average\n";
     cout << "successful search: " << fixed << setprecision(4) << avgSuccessful
          << " comparisons on average\n";
+
+    // 儲存建置好的雜湊表供任務三搜尋使用
+    tableX = hashTable;
+    tableSizeX = tableSize;
+  }
+
+  // 任務三：以平方探測 (Quadratic Probing) 搜尋
+  void searchQuadraticProbing() {
+    if (tableX.empty())
+      return;
+
+    while (true) {
+      cout << "Input a student ID to search ([0] Quit): ";
+      string input;
+      if (!getline(cin, input))
+        break;
+      if (!input.empty() && input.back() == '\r')
+        input.pop_back();
+
+      if (input == "0") {
+        cout << "\n\n";
+        break; // 退出搜尋迴圈
+      }
+
+      string sidStr = input.length() > 10 ? input.substr(0, 10) : input;
+      unsigned long long asciiProduct = getAsciiProduct(sidStr);
+      int baseHash = asciiProduct % tableSizeX;
+
+      bool found = false;
+      int comparisons = 0;
+
+      // 平方探測搜尋
+      for (int i = 0; i < tableSizeX; ++i) {
+        comparisons++;
+        int probeHash = (baseHash + (long long)i * i) % tableSizeX;
+
+        if (tableX[probeHash].isEmpty) {
+          // 遇到空位，代表絕對不存在該筆資料
+          break;
+        }
+
+        if (tableX[probeHash].sid == input) {
+          // 找到資料
+          cout.unsetf(
+              ios_base::floatfield); // 移除小數點後強制補零，使用預設輸出
+          cout << "\n{ " << tableX[probeHash].sid << ", "
+               << tableX[probeHash].sname << ", " << tableX[probeHash].mean
+               << " } is found after " << comparisons << " probes.\n\n";
+          found = true;
+          break;
+        }
+      }
+
+      if (!found) {
+        cout << "\n"
+             << input << " is not found after " << comparisons
+             << " probes.\n\n";
+      }
+    }
   }
 
   // 任務二：以雙重雜湊 (Double Hashing) 建立雜湊表 Y
@@ -298,11 +373,14 @@ public:
     int totalSuccessfulComparisons = 0; // 記錄成功搜尋總比較次數
 
     // 開始將每一筆資料依序插入雜湊表
+    int dataIdx = 0;
     for (const auto &stu : dataList) {
-      string sidStr(stu.sid, 8); // 老師指定學號為固定八位數，忽略最後兩個位元的垃圾值
-      sidStr = sidStr.c_str();   // 截斷至 \0
+      string sidStr(stu.sid,
+                    10);       // 學號為固定十位數
+      sidStr = sidStr.c_str(); // 截斷至 \0
 
-      unsigned long long asciiProduct = getAsciiProduct(sidStr); // 計算學號 ASCII 乘積
+      unsigned long long asciiProduct =
+          getAsciiProduct(sidStr);             // 計算學號 ASCII 乘積
       int baseHash = asciiProduct % tableSize; // 基礎雜湊函數 (與任務一相同)
 
       // 步階函數：最高步階 - (ASCII相乘結果 % 最高步階)
@@ -314,17 +392,18 @@ public:
       // 雙重雜湊處理碰撞：(hash + i * step) % tableSize
       for (int i = 0; i < tableSize; ++i) {
         comparisons++; // 每次探測即增加一次比較
-        int probeHash = (baseHash + (long long)i * step) % tableSize; // 防止溢位
+        int probeHash =
+            (baseHash + (long long)i * step) % tableSize; // 防止溢位
 
         // 找到空位則將資料填入
         if (hashTable[probeHash].isEmpty) {
-          hashTable[probeHash].hvalue = baseHash;        // 記錄基礎雜湊值
-          hashTable[probeHash].sid = sidStr;             // 記錄學號
-          string snameStr(stu.sname, 10);                // 指定長度防止越界
-          snameStr = snameStr.c_str();                   // 安全截斷
-          hashTable[probeHash].sname = snameStr;         // 記錄姓名
-          hashTable[probeHash].mean = stu.average;       // 記錄平均分數
-          hashTable[probeHash].isEmpty = false;          // 標記為已被占用
+          hashTable[probeHash].hvalue = baseHash;  // 記錄基礎雜湊值
+          hashTable[probeHash].sid = sidStr;       // 記錄學號
+          string snameStr(stu.sname, 10);          // 指定長度防止越界
+          snameStr = snameStr.c_str();             // 安全截斷
+          hashTable[probeHash].sname = snameStr;   // 記錄姓名
+          hashTable[probeHash].mean = stu.average; // 記錄平均分數
+          hashTable[probeHash].isEmpty = false;    // 標記為已被占用
 
           inserted = true;                           // 標記成功插入
           totalSuccessfulComparisons += comparisons; // 累加成功比較的次數
@@ -335,8 +414,9 @@ public:
 
       // 若所有探測均被占用，則顯示無法加入訊息並忽略資料
       if (!inserted) {
-        cout << "Cannot insert student ID: " << sidStr << endl;
+        cout << "### Failed at [" << dataIdx << "]. ###\n";
       }
+      dataIdx++;
     }
 
     // 計算搜尋現存值 (successful search) 的平均比較次數
@@ -369,6 +449,64 @@ public:
     cout << "\nHash table has been successfully created by Double hashing   \n";
     cout << "successful search: " << fixed << setprecision(4) << avgSuccessful
          << " comparisons on average\n";
+
+    // 儲存建置好的雜湊表供任務四搜尋使用
+    tableY = hashTable;
+    tableSizeY = tableSize;
+    maxStepY = maxStep;
+  }
+
+  // 任務四：以雙重雜湊 (Double Hashing) 搜尋
+  void searchDoubleHashing() {
+    if (tableY.empty())
+      return;
+
+    while (true) {
+      cout << "Input a student ID to search ([0] Quit): ";
+      string input;
+      if (!getline(cin, input))
+        break;
+      if (!input.empty() && input.back() == '\r')
+        input.pop_back();
+
+      if (input == "0") {
+        cout << "\n\n";
+        break; // 退出搜尋迴圈
+      }
+
+      string sidStr = input.length() > 10 ? input.substr(0, 10) : input;
+      unsigned long long asciiProduct = getAsciiProduct(sidStr);
+      int baseHash = asciiProduct % tableSizeY;
+      int step = maxStepY - (asciiProduct % maxStepY);
+
+      bool found = false;
+      int comparisons = 0;
+
+      // 雙重雜湊搜尋
+      for (int i = 0; i < tableSizeY; ++i) {
+        comparisons++;
+        int probeHash = (baseHash + (long long)i * step) % tableSizeY;
+
+        if (tableY[probeHash].isEmpty) {
+          break; // 空位，即不存在
+        }
+
+        if (tableY[probeHash].sid == input) {
+          cout.unsetf(ios_base::floatfield);
+          cout << "\n{ " << tableY[probeHash].sid << ", "
+               << tableY[probeHash].sname << ", " << tableY[probeHash].mean
+               << " } is found after " << comparisons << " probes.\n\n";
+          found = true;
+          break;
+        }
+      }
+
+      if (!found) {
+        cout << "\n"
+             << input << " is not found after " << comparisons
+             << " probes.\n\n";
+      }
+    }
   }
 };
 
@@ -432,10 +570,11 @@ int main() {
         }
 
         if (fileNum == "0") {
-          cout << '\n';
+          cout << "\n\n";
           continue; // 選擇 0 則退回主選單
         }
 
+        isTask1Done = false; // 每次執行任務一前，先重置狀態
         manager.clearData(); // 先清空前次可能殘留的記憶體資料
 
         // 呼叫 loadFile 進行讀檔 (任務零自動判斷並處理 txt 或 bin)
@@ -444,6 +583,9 @@ int main() {
           manager.runQuadraticProbing(fileNum);
           isTask1Done = true;       // 標記任務一已成功完成
           currentFileNum = fileNum; // 儲存這個檔案編號，讓任務二使用
+
+          // 任務三：緊接著執行搜尋迴圈
+          manager.searchQuadraticProbing();
         }
 
       } else if (cmd == 2) {
@@ -454,17 +596,19 @@ int main() {
         } else {
           // 呼叫任務二函式，並沿用任務一所儲存的檔案編號
           manager.runDoubleHashing(currentFileNum);
+
+          // 任務四：緊接著執行搜尋迴圈
+          manager.searchDoubleHashing();
         }
 
       } else {
         // 如果輸入的整數不為 0, 1, 2，顯示找不到指令
-        cout << "\nCommand does not exist!\n\n";
+        cout << "\nCommand does not exist!\n\n\n";
       }
     } else {
       // 如果輸入的根本不是整數，顯示找不到指令
-      cout << "\nCommand does not exist!\n\n";
+      cout << "\nCommand does not exist!\n\n\n";
     }
-    cout << '\n'; // 每次執行完指令後多空一行，與 DEMO 畫面保持一致
   }
 
   return 0; // 程式正常結束
